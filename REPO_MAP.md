@@ -1,6 +1,6 @@
 # Orion-Configuration
 
-**Remote:** `git@github.com:SiliconCentric/Orion-Configuration.git`
+**Remote:** `git@github.com:soccentric-orion/Orion-Configuration.git`
 **Parent project:** [Orion](../Orion.md) (target hardware: **ST STM32MP1**.)
 **Leaf type:** `<Project>-Configuration`
 **Status:** REAL — actively built out
