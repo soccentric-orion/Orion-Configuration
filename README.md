@@ -1,86 +1,44 @@
-# SoCcentric WebConfig
+# Orion-Configuration
 
-An **on-device, browser-based configuration web UI** for the Orion
-Yocto/embedded-Linux platform (ST STM32MP1). One small Rust daemon serves a vanilla-JS
-frontend over TLS; board-specific data lives in a single board-manifest file
-(`board-manifests/orion.json`).
+## 1. Project Summary
 
-> The full design specification lives in [`docs/webconfig-spec.md`](docs/webconfig-spec.md).
+Orion-Configuration is the on-device WebConfig product for Orion's ST STM32MP1 platform.
 
-## What it is
+- A Rust workspace contains `webconfig-engine`, a synchronous and hardware-testable configuration core, and `webconfigd`, its asynchronous Axum HTTP layer.
+- The daemon uses Tokio current-thread, rustls TLS, a no-build vanilla JavaScript frontend, and one non-root service.
+- Board capabilities come from `board-manifests/orion.json` or the generic YAML fallback.
 
-A field engineer or operator points a browser at the device
-(`https://<device>:8443`) and configures it: system identity, networking,
-services, updates, monitoring, logs, alerts, security, and I/O — all behind
-authenticated, role-based access with a commit/confirm rollback safety net for
-networking changes.
+The engine owns configuration storage, schema parsing and validation, board manifests, system appliers, encrypted backup and restore, audit logging, users, and monitoring reads from a Linux sysroot.
 
-- **One daemon**, `current_thread` tokio runtime, rustls (no OpenSSL), no
-  database (JSON + ring files). Target: <15 MB RAM, 3-6 MB stripped binary.
-- **Vanilla JS frontend**, no build step, no node at build time, <500 KB total.
-- **Schema-driven rendering**: adding a setting is a schema file — zero UI code.
-- **Flagship networking rollback**: network changes are provisional; reconnect
-  and confirm within a window or they auto-roll-back.
-- **Real + mock system interactions**: RAUC/zbus talk to real backends on-device
-  and to mocks on the fake-sysroot test harness (no hardware to test).
+- The HTTP layer adds routing, authentication, CSRF, SSE events, and the bridge to the engine.
+- Frontend pages cover system, networking, services, updates, monitoring, logs, alerts, cloud, time, display, camera, serial, LEDs, security, backup, and MCU settings.
+- Network changes support provisional apply and rollback confirmation; updates use RAUC slots and staged bundles.
 
-## Repository layout
+The repository also ships JSON schemas, board data, systemd/polkit assets, and the `meta-webconfig` Yocto layer.
 
-```
-Cargo.toml                  # workspace, pinned deps, exact release profile
-crates/
-  webconfig-engine/         # config store, appliers, schema, manifest, alert/monitoring
-  webconfigd/               # axum HTTP daemon (TLS, auth, CSRF, 9 section APIs, SSE)
-frontend/                   # vanilla JS: index.html, styles.css, schema-form.js, pages.js, app.js
-schemas/                    # *.schema.json — schema-driven rendering + validation
-board-manifests/            # orion.json (board-specific data) + generic.yaml fallback
-meta-webconfig/             # Yocto layer: daemon, static assets, schemas, manifest, hardened unit
-docs/                       # spec, API reference, schema format, board-manifest spec, planning/audits
-Makefile                    # build | release | test | lint | fmt | vendor | cross | run | clean
-```
+- The documented gate is `make build && make test && make lint`.
+- Fake-sysroot tests need no hardware.
+- This summary reports source and tests, not deployed TLS, RAUC, or real-device verification.
 
-## Build & test
+## 2. Feature Status
 
-The repo-root Makefile is the single entry point (per SoCcentric conventions):
+| # | Name / Description | Implemented? | Test Coverage? | Manual Test |
+|---:|---|---|---|---|
+| 1 | Rust configuration engine and file-backed store | Implemented | Partial: engine tests present | [ ] Manual verification required |
+| 2 | JSON/YAML board manifest loading | Implemented | Partial: parse checks documented | [ ] Manual verification required |
+| 3 | JSON-Schema settings and frontend forms | Implemented | Partial: schema and engine tests | [ ] Manual verification required |
+| 4 | Axum daemon with TLS/rustls and Tokio | Implemented | Partial: in-crate HTTP tests | [ ] Manual verification required |
+| 5 | Session authentication and CSRF | Implemented | Partial: HTTP coverage present | [ ] Manual verification required |
+| 6 | Provisional network apply and rollback | Implemented | Partial: real reconnect unverified | [ ] Manual verification required |
+| 7 | Monitoring vitals and SSE events | Implemented | Partial: fake-sysroot coverage | [ ] Manual verification required |
+| 8 | Encrypted backup/restore and audit log | Implemented | Partial: backup unit tests | [ ] Manual verification required |
+| 9 | RAUC updates and MCU actions | Partial | Unknown: real backends unverified | [ ] Manual verification required |
+| 10 | `meta-webconfig` Yocto packaging | Implemented | Unknown: image build not run here | [ ] Manual verification required |
+
+## 3. Build and Test
 
 ```bash
-make build    # debug build (host target)
-make release  # exact spec release profile (opt-level=z, lto, panic=abort, stripped)
-make test     # engine + HTTP integration tests (fake sysroot, no hardware)
-make lint     # clippy -D warnings + rustfmt --check
-make vendor   # regenerate the offline crate tarball for reproducible builds
-make cross    # build all three cross-targets: x86_64, aarch64, armv7
-make run      # run the daemon against a tempdir fake sysroot (dev)
+make build
+make test
+make lint
 ```
-
-Validation gate (used by the git workflows and CI): `make build && make test && make lint`.
-
-## Cross-targets
-
-`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
-`armv7-unknown-linux-gnueabihf`. Vendored crates + `CARGO_NET_OFFLINE=1` make
-builds fully offline and reproducible.
-
-## Deploying (Yocto)
-
-Add the layer and packages to your image:
-
-```bitbake
-IMAGE_INSTALL:append = " webconfigd webconfig-static webconfig-schemas webconfig-manifest"
-```
-
-Map your BSP `MACHINE` to its board manifest in
-`meta-webconfig/recipes-core/webconfig/webconfig-manifest.bbappend`.
-See [`meta-webconfig/README.md`](meta-webconfig/README.md).
-
-## Documentation
-
-- [Design specification](docs/webconfig-spec.md)
-- [REST API reference](docs/api-reference.md)
-- [Schema format](docs/schema-format.md)
-- [Board-manifest format](docs/board-manifest.md)
-- [Production-readiness audit](docs/planning/MasterPlan.md) and its [acceptance checklist](docs/planning/Checkpoint.md)
-
-## License
-
-CLOSED (SoCcentric internal IV&V tooling).
